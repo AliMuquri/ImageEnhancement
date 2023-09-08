@@ -192,103 +192,107 @@ valid_hr_paths = [os.path.join(valset_highres, filename) for filename in os.list
 #     if f1!=f2:
 #         print(f1)
 #         print(f2)
-               
-#Create a tuple of the training data
-train_dataset = tf.data.Dataset.from_tensor_slices((train_lr_paths, train_hr_paths))
-valid_dataset = tf.data.Dataset.from_tensor_slices((valid_lr_paths, valid_hr_paths))
 
-#load the dataset from path
-train_dataset = train_dataset.map(load, num_parallel_calls=tf.data.AUTOTUNE)
-valid_dataset = valid_dataset.map(load, num_parallel_calls=tf.data.AUTOTUNE)
+def main():           
+    #Create a tuple of the training data
+    train_dataset = tf.data.Dataset.from_tensor_slices((train_lr_paths, train_hr_paths))
+    valid_dataset = tf.data.Dataset.from_tensor_slices((valid_lr_paths, valid_hr_paths))
 
-# #preprocessing
-# train_dataset = train_dataset.map(preprocessing, num_parallel_calls=tf.data.AUTOTUNE)
-# valid_dataset = valid_dataset.map(preprocessing, num_parallel_calls=tf.data.AUTOTUNE)
+    #load the dataset from path
+    train_dataset = train_dataset.map(load, num_parallel_calls=tf.data.AUTOTUNE)
+    valid_dataset = valid_dataset.map(load, num_parallel_calls=tf.data.AUTOTUNE)
 
-#create random number generator for creating seed
+    # #preprocessing
+    # train_dataset = train_dataset.map(preprocessing, num_parallel_calls=tf.data.AUTOTUNE)
+    # valid_dataset = valid_dataset.map(preprocessing, num_parallel_calls=tf.data.AUTOTUNE)
 
-rng = tf.random.Generator.from_seed(
-    tf.cast(20, dtype=tf.int64)
-)
+    #create random number generator for creating seed
 
-#check if the images are cropped at the same region
-# for lr, hr in zip(train_lr_paths[:10], train_hr_paths[:10]):
-#     load_img_lr, load_img_hr = load(lr, hr)
-#     fig, axs = plt.subplots(4,1)
-#     axs[0].imshow(load_img_lr.numpy())
-#     axs[1].imshow(load_img_hr.numpy())
-#     cropped_img_lr, cropped_img_hr = crop_images(load_img_lr ,load_img_hr, rng )
-#     axs[2].imshow(cropped_img_lr.numpy())
-#     axs[3].imshow(cropped_img_hr.numpy())
-#     cropped_img_lr, cropped_img_hr = crop_images(load_img_lr ,load_img_hr, rng )
-#     plt.show()
+    rng = tf.random.Generator.from_seed(
+        tf.cast(20, dtype=tf.int64)
+    )
 
-#augmentations
-train_dataset = train_dataset.map(lambda lr, hr: crop_images(lr, hr, rng), num_parallel_calls=tf.data.AUTOTUNE)\
-    .map(flip_left_right_images, num_parallel_calls=tf.data.AUTOTUNE)\
-    .map(flip_up_down_images, num_parallel_calls=tf.data.AUTOTUNE)\
-    .map(rotate_images, num_parallel_calls=tf.data.AUTOTUNE)
+    #check if the images are cropped at the same region
+    # for lr, hr in zip(train_lr_paths[:10], train_hr_paths[:10]):
+    #     load_img_lr, load_img_hr = load(lr, hr)
+    #     fig, axs = plt.subplots(4,1)
+    #     axs[0].imshow(load_img_lr.numpy())
+    #     axs[1].imshow(load_img_hr.numpy())
+    #     cropped_img_lr, cropped_img_hr = crop_images(load_img_lr ,load_img_hr, rng )
+    #     axs[2].imshow(cropped_img_lr.numpy())
+    #     axs[3].imshow(cropped_img_hr.numpy())
+    #     cropped_img_lr, cropped_img_hr = crop_images(load_img_lr ,load_img_hr, rng )
+    #     plt.show()
 
-valid_dataset = valid_dataset.map(lambda lr, hr: crop_images(lr, hr, rng), num_parallel_calls=tf.data.AUTOTUNE)\
-    .map(flip_left_right_images, num_parallel_calls=tf.data.AUTOTUNE)\
-    .map(flip_up_down_images, num_parallel_calls=tf.data.AUTOTUNE)\
-    .map(rotate_images, num_parallel_calls=tf.data.AUTOTUNE)\
+    #augmentations
+    train_dataset = train_dataset.map(lambda lr, hr: crop_images(lr, hr, rng), num_parallel_calls=tf.data.AUTOTUNE)\
+        .map(flip_left_right_images, num_parallel_calls=tf.data.AUTOTUNE)\
+        .map(flip_up_down_images, num_parallel_calls=tf.data.AUTOTUNE)\
+        .map(rotate_images, num_parallel_calls=tf.data.AUTOTUNE)
 
-#batch size
-train_dataset = train_dataset.batch(32).prefetch(buffer_size=tf.data.AUTOTUNE)
-valid_dataset = valid_dataset.batch(32).prefetch(buffer_size=tf.data.AUTOTUNE)
+    valid_dataset = valid_dataset.map(lambda lr, hr: crop_images(lr, hr, rng), num_parallel_calls=tf.data.AUTOTUNE)\
+        .map(flip_left_right_images, num_parallel_calls=tf.data.AUTOTUNE)\
+        .map(flip_up_down_images, num_parallel_calls=tf.data.AUTOTUNE)\
+        .map(rotate_images, num_parallel_calls=tf.data.AUTOTUNE)\
 
-#reduce learning rate as learning halts
-reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
-    monitor='loss',
-    factor=0.5,
-    patience=3,
-    min_lr = 1e-10,
-    verbose=1
-)
+    #batch size
+    train_dataset = train_dataset.batch(32).prefetch(buffer_size=tf.data.AUTOTUNE)
+    valid_dataset = valid_dataset.batch(32).prefetch(buffer_size=tf.data.AUTOTUNE)
 
-#create model instance, compile, train and save model to file.
-model = EDSR()
+    #reduce learning rate as learning halts
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor='loss',
+        factor=0.5,
+        patience=3,
+        min_lr = 1e-10,
+        verbose=1
+    )
 
-model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss='mae', metrics=[tf.keras.metrics.PSNR()])
-           
-model.fit(train_dataset, validation_data=valid_dataset, epochs=200, callbacks=[reduce_lr])
+    #create model instance, compile, train and save model to file.
+    model = EDSR()
 
-model.save('edsr_model')
+    model.compile(optimizer=tf.keras.optimizers.Adam(1e-3), loss='mae', metrics=[tf.keras.metrics.PSNR()])
+            
+    model.fit(train_dataset, validation_data=valid_dataset, epochs=200, callbacks=[reduce_lr])
 
-
-
-#load model with new shape for inference. 
-# model = tf.keras.models.load_model('edsr_model', compile=False)
-# weights = model.get_weights()
-# model = None
-# pred_model = EDSR()
-# pred_model.build((None, None, None, 3))
-# pred_model.set_weights(weights)
-# model = pred_model
-
-# #tiling
-# tile_size=(256,256 ,3)
-# stride_size = (256, 256, 1)
+    model.save('edsr_model')
 
 
-img = tf.expand_dims(tf.image.decode_image(tf.io.read_file(my_img)), axis=0) #load image to enhance
-model.use_tile() # enables tiling for very large image files
 
-better_img = model.predict(img) 
-#
-better_img_uint8 = tf.cast(better_img*255, dtype=tf.uint8) 
-encoded_image = tf.image.encode_jpeg(tf.squeeze(better_img_uint8))
-tf.io.write_file(os.path.join(main_path, 'better body.jpg'), encoded_image)
+    #load model with new shape for inference. 
+    # model = tf.keras.models.load_model('edsr_model', compile=False)
+    # weights = model.get_weights()
+    # model = None
+    # pred_model = EDSR()
+    # pred_model.build((None, None, None, 3))
+    # pred_model.set_weights(weights)
+    # model = pred_model
 
-#plot original and enhanced image side by side
-fig, axs = plt.subplots(1,2)
-axs[0].imshow(tf.squeeze(img))
-axs[0].set_title('original')
-axs[0].grid(False)
-axs[1].imshow(tf.squeeze(better_img_uint8))
-axs[1].set_title('enhanced')
-axs[1].grid(False)
-plt.show()
+    # #tiling
+    # tile_size=(256,256 ,3)
+    # stride_size = (256, 256, 1)
 
-sys.exit()
+
+    img = tf.expand_dims(tf.image.decode_image(tf.io.read_file(my_img)), axis=0) #load image to enhance
+    model.use_tile() # enables tiling for very large image files
+
+    better_img = model.predict(img) 
+    #
+    better_img_uint8 = tf.cast(better_img*255, dtype=tf.uint8) 
+    encoded_image = tf.image.encode_jpeg(tf.squeeze(better_img_uint8))
+    tf.io.write_file(os.path.join(main_path, 'better body.jpg'), encoded_image)
+
+    #plot original and enhanced image side by side
+    fig, axs = plt.subplots(1,2)
+    axs[0].imshow(tf.squeeze(img))
+    axs[0].set_title('original')
+    axs[0].grid(False)
+    axs[1].imshow(tf.squeeze(better_img_uint8))
+    axs[1].set_title('enhanced')
+    axs[1].grid(False)
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
+    sys.exit()
